@@ -98,6 +98,27 @@ docker compose up -d --build    # redéployer après un git pull
 sqlite3 data/amazon.db 'SELECT * FROM price_history ORDER BY scraped_at DESC LIMIT 10;'
 ```
 
+## Améliorer le taux de succès du scraping (cookies de session)
+
+Depuis une IP datacenter (VPS), Amazon bloque agressivement. Le backend Playwright
+applique déjà des techniques *stealth* (masquage des signaux d'automatisation,
+viewport et fuseau réalistes), mais le levier le plus efficace est d'injecter les
+**cookies d'une session amazon.fr réelle** :
+
+1. Sur ton navigateur, connecte-toi sur [amazon.fr](https://www.amazon.fr).
+2. Installe une extension d'export de cookies (ex. *Cookie-Editor*).
+3. Sur amazon.fr, ouvre l'extension → **Export** → *Export as JSON*.
+4. Colle le contenu dans `data/cookies.json` sur le VPS (le format d'export est
+   normalisé automatiquement).
+
+Le fichier est optionnel : absent, le scraping continue sans (best-effort). Les
+cookies expirent au bout de quelques semaines — à réexporter si le taux de succès
+chute. `data/` est dans `.gitignore` : ces cookies ne partent jamais sur GitHub.
+
+> ⚠️ Même avec cookies + stealth, une IP datacenter reste souvent bloquée par
+> Amazon. Pour un fonctionnement fiable, la seule solution robuste est de sortir
+> via une IP résidentielle (proxy résidentiel ou tunnel).
+
 ## Note légale
 
 Le scraping automatisé est contraire aux CGU d'Amazon. Ce projet est prévu pour un **usage personnel à très faible volume** (rate-limit, cache, horaires avec jitter). À utiliser en connaissance de cause.

@@ -68,13 +68,26 @@ class PlaywrightBackend(ScraperBackend):
 
     def fetch(self, url: str) -> str:
         from playwright.sync_api import sync_playwright
+        from playwright_stealth import Stealth
 
+        from amazon_mcp.config import COOKIES_PATH
+        from amazon_mcp.scraping.cookies import load_cookies
         from amazon_mcp.scraping.detection import is_blocked
 
-        with sync_playwright() as p:
+        cookies = load_cookies(COOKIES_PATH)
+        # Stealth masque les signaux d'automatisation (navigator.webdriver, etc.)
+        # sur tous les contextes créés dans ce bloc.
+        with Stealth().use_sync(sync_playwright()) as p:
             browser = p.chromium.launch(headless=True)
             try:
-                context = browser.new_context(locale="fr-FR", user_agent=random.choice(_USER_AGENTS))
+                context = browser.new_context(
+                    locale="fr-FR",
+                    user_agent=random.choice(_USER_AGENTS),
+                    viewport={"width": 1920, "height": 1080},
+                    timezone_id="Europe/Paris",
+                )
+                if cookies:
+                    context.add_cookies(cookies)
                 page = context.new_page()
                 page.goto(url, wait_until="domcontentloaded", timeout=30_000)
                 # Le challenge AWS WAF se résout en JS puis recharge la page :
