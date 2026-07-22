@@ -1,0 +1,12 @@
+services:
+  amazon-mcp:
+    build: .
+    container_name: amazon-mcp
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8321:8321"
+    env_file: .env
+    environment:
+      - DB_PATH=/data/amazon.db
+    volumes:
+      - ./data:/data
