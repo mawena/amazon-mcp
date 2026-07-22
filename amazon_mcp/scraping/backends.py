@@ -69,12 +69,22 @@ class PlaywrightBackend(ScraperBackend):
     def fetch(self, url: str) -> str:
         from playwright.sync_api import sync_playwright
 
+        from amazon_mcp.scraping.detection import is_blocked
+
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             try:
                 context = browser.new_context(locale="fr-FR", user_agent=random.choice(_USER_AGENTS))
                 page = context.new_page()
                 page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-                return page.content()
+                # Le challenge AWS WAF se résout en JS puis recharge la page :
+                # on attend jusqu'à ~20 s que du vrai contenu apparaisse.
+                html = page.content()
+                for _ in range(10):
+                    if not is_blocked(html):
+                        break
+                    page.wait_for_timeout(2_000)
+                    html = page.content()
+                return html
             finally:
                 browser.close()

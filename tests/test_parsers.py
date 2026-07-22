@@ -26,6 +26,17 @@ def test_parse_product_unavailable():
     assert p["price"] is None
 
 
+def test_parse_product_new_layout():
+    # Layout 2025+ : a-offscreen vide, prix dans aok-offscreen, avis en JSON embarqué
+    html = (FIXTURES / "product_new_layout.html").read_text()
+    p = parse_product(html, "B0GVMZ8Q5T")
+    assert p["title"] == "Clavier Gamer Mécanique TKL"
+    assert p["price"] == 29.95
+    assert p["rating"] == 4.6
+    assert p["review_count"] == 840
+    assert p["in_stock"] is True
+
+
 def test_parse_search():
     html = (FIXTURES / "search.html").read_text()
     results = parse_search(html)
