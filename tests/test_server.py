@@ -43,6 +43,30 @@ def get_data(result):
 
 
 @pytest.mark.anyio
+async def test_scraping_runs_outside_event_loop(monkeypatch):
+    """Régression : Playwright sync exige que fetch() tourne hors de la boucle asyncio."""
+    import asyncio
+
+    class LoopCheckBackend(ScraperBackend):
+        name = "loopcheck"
+
+        def fetch(self, url):
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                pass  # hors de la boucle : OK
+            else:
+                raise AssertionError("fetch() exécuté dans la boucle asyncio")
+            return (FIXTURES / "product.html").read_text()
+
+    monkeypatch.setattr(server, "engine", ScraperEngine(backends=[LoopCheckBackend()], min_interval=0))
+    async with client_session() as client:
+        result = await client.call_tool("get_product", {"url_or_asin": "B08N5WRWNW"})
+    assert not result.isError, result.content[0].text
+    assert get_data(result)["price"] == 89.99
+
+
+@pytest.mark.anyio
 async def test_search_products():
     async with client_session() as client:
         result = await client.call_tool("search_products", {"query": "clavier", "max_results": 5})

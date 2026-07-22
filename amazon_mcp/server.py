@@ -1,5 +1,8 @@
 import logging
+from functools import partial
 from urllib.parse import quote_plus
+
+import anyio.to_thread
 
 from amazon_mcp import db
 from amazon_mcp import tracker as tracker_mod
@@ -37,25 +40,36 @@ def _conn():
     return db.get_conn(_db_path)
 
 
+async def _scrape(url: str) -> str:
+    # Le scraping (Playwright sync inclus) doit tourner hors de la boucle asyncio :
+    # offload dans un thread worker pour ne pas bloquer le serveur.
+    return await anyio.to_thread.run_sync(partial(engine.get_html, url))
+
+
 @mcp.tool()
-def search_products(query: str, max_results: int = 10) -> list[dict]:
+async def search_products(query: str, max_results: int = 10) -> list[dict]:
     """Recherche des produits sur amazon.fr et retourne titre, prix, ASIN, URL, note, Prime."""
-    html = engine.get_html(f"https://www.amazon.fr/s?k={quote_plus(query)}")
+    html = await _scrape(f"https://www.amazon.fr/s?k={quote_plus(query)}")
     return parse_search(html, max_results)
 
 
 @mcp.tool()
-def get_product(url_or_asin: str) -> dict:
+async def get_product(url_or_asin: str) -> dict:
     """Détails d'un produit amazon.fr (URL ou ASIN) : prix, disponibilité, note, avis, vendeur."""
     asin = extract_asin(url_or_asin)
-    html = engine.get_html(product_url(asin))
+    html = await _scrape(product_url(asin))
     return parse_product(html, asin)
 
 
-@mcp.tool()
-def track_product(url_or_asin: str, label: str | None = None) -> dict:
-    """Ajoute un produit au suivi de prix (relevé automatique périodique)."""
+def _track_sync(url_or_asin: str, label: str | None) -> dict:
+    # La connexion SQLite doit être créée dans le thread qui l'utilise.
     return tracker_mod.track(engine, _conn(), url_or_asin, label)
+
+
+@mcp.tool()
+async def track_product(url_or_asin: str, label: str | None = None) -> dict:
+    """Ajoute un produit au suivi de prix (relevé automatique périodique)."""
+    return await anyio.to_thread.run_sync(partial(_track_sync, url_or_asin, label))
 
 
 @mcp.tool()
